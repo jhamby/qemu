@@ -201,6 +201,12 @@ STRUCT(loop_info64,
        MK_ARRAY(TYPE_CHAR, 32),  /* lo_encrypt_key */
        MK_ARRAY(TYPE_ULONGLONG, 2))  /* lo_init */
 
+STRUCT(loop_config,
+       TYPE_INT,                 /* fd */
+       TYPE_INT,                 /* block_size */
+       MK_STRUCT(STRUCT_loop_info64), /* info */
+       MK_ARRAY(TYPE_ULONGLONG, 8)) /* __reserved */
+
 /* mag tape ioctls */
 STRUCT(mtop, TYPE_SHORT, TYPE_INT)
 STRUCT(mtget, TYPE_LONG, TYPE_LONG, TYPE_LONG, TYPE_LONG, TYPE_LONG,
@@ -334,6 +340,11 @@ STRUCT(file_clone_range,
        TYPE_ULONGLONG, /* src_offset */
        TYPE_ULONGLONG, /* src_length */
        TYPE_ULONGLONG) /* dest_offset */
+
+STRUCT(fstrim_range,
+       TYPE_ULONGLONG, /* start */
+       TYPE_ULONGLONG, /* len */
+       TYPE_ULONGLONG) /* minlen */
 
 STRUCT(fiemap_extent,
        TYPE_ULONGLONG, /* fe_logical */

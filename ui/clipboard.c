@@ -1,5 +1,6 @@
 #include "qemu/osdep.h"
 #include "ui/clipboard.h"
+#include "trace.h"
 
 static NotifierList clipboard_notifiers =
     NOTIFIER_LIST_INITIALIZER(clipboard_notifiers);
@@ -8,7 +9,7 @@ static QemuClipboardInfo *cbinfo[QEMU_CLIPBOARD_SELECTION__COUNT];
 
 void qemu_clipboard_peer_register(QemuClipboardPeer *peer)
 {
-    notifier_list_add(&clipboard_notifiers, &peer->update);
+    notifier_list_add(&clipboard_notifiers, &peer->notifier);
 }
 
 void qemu_clipboard_peer_unregister(QemuClipboardPeer *peer)
@@ -18,8 +19,7 @@ void qemu_clipboard_peer_unregister(QemuClipboardPeer *peer)
     for (i = 0; i < QEMU_CLIPBOARD_SELECTION__COUNT; i++) {
         qemu_clipboard_peer_release(peer, i);
     }
-
-    notifier_remove(&peer->update);
+    notifier_remove(&peer->notifier);
 }
 
 bool qemu_clipboard_peer_owns(QemuClipboardPeer *peer,
@@ -42,15 +42,53 @@ void qemu_clipboard_peer_release(QemuClipboardPeer *peer,
     }
 }
 
+bool qemu_clipboard_check_serial(QemuClipboardInfo *info, bool client)
+{
+    bool ok;
+
+    if (!info->has_serial ||
+        !cbinfo[info->selection] ||
+        !cbinfo[info->selection]->has_serial) {
+        trace_clipboard_check_serial(-1, -1, true);
+        return true;
+    }
+
+    if (client) {
+        ok = info->serial >= cbinfo[info->selection]->serial;
+    } else {
+        ok = info->serial > cbinfo[info->selection]->serial;
+    }
+
+    trace_clipboard_check_serial(cbinfo[info->selection]->serial, info->serial, ok);
+    return ok;
+}
+
 void qemu_clipboard_update(QemuClipboardInfo *info)
 {
-    g_autoptr(QemuClipboardInfo) old = NULL;
+    uint32_t type;
+    QemuClipboardNotify notify = {
+        .type = QEMU_CLIPBOARD_UPDATE_INFO,
+        .info = info,
+    };
     assert(info->selection < QEMU_CLIPBOARD_SELECTION__COUNT);
 
-    notifier_list_notify(&clipboard_notifiers, info);
+    for (type = 0; type < QEMU_CLIPBOARD_TYPE__COUNT; type++) {
+        /*
+         * If data is missing, the clipboard owner's 'request' callback needs to
+         * be set. Otherwise, there is no way to get the clipboard data and
+         * qemu_clipboard_request() cannot be called.
+         */
+        if (info->types[type].available && !info->types[type].data) {
+            assert(info->owner && info->owner->request);
+        }
+    }
 
-    old = cbinfo[info->selection];
-    cbinfo[info->selection] = qemu_clipboard_info_ref(info);
+    notifier_list_notify(&clipboard_notifiers, &notify);
+
+    if (cbinfo[info->selection] != info) {
+        qemu_clipboard_info_unref(cbinfo[info->selection]);
+        cbinfo[info->selection] = qemu_clipboard_info_ref(info);
+    }
 }
 
 QemuClipboardInfo *qemu_clipboard_info(QemuClipboardSelection selection)
@@ -106,8 +144,24 @@ void qemu_clipboard_request(QemuClipboardInfo *info,
         !info->owner)
         return;
 
+    assert(info->owner->request);
+
     info->types[type].requested = true;
     info->owner->request(info, type);
+}
+
+void qemu_clipboard_reset_serial(void)
+{
+    QemuClipboardNotify notify = { .type = QEMU_CLIPBOARD_RESET_SERIAL };
+    int i;
+
+    for (i = 0; i < QEMU_CLIPBOARD_SELECTION__COUNT; i++) {
+        QemuClipboardInfo *info = qemu_clipboard_info(i);
+        if (info) {
+            info->serial = 0;
+        }
+    }
+    notifier_list_notify(&clipboard_notifiers, &notify);
 }
 
 void qemu_clipboard_set_data(QemuClipboardPeer *peer,
@@ -123,9 +177,15 @@ void qemu_clipboard_set_data(QemuClipboardPeer *peer,
     }
 
     g_free(info->types[type].data);
-    info->types[type].data = g_memdup(data, size);
-    info->types[type].size = size;
-    info->types[type].available = true;
+    if (size) {
+        info->types[type].data = g_memdup2(data, size);
+        info->types[type].size = size;
+        info->types[type].available = true;
+    } else {
+        info->types[type].data = NULL;
+        info->types[type].size = 0;
+        info->types[type].available = false;
+    }
 
     if (update) {
         qemu_clipboard_update(info);

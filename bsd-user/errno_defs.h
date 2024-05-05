@@ -34,8 +34,8 @@
  *      @(#)errno.h     8.5 (Berkeley) 1/21/94
  */
 
-#ifndef _ERRNO_DEFS_H_
-#define _ERRNO_DEFS_H_
+#ifndef ERRNO_DEFS_H
+#define ERRNO_DEFS_H
 
 #define TARGET_EPERM            1               /* Operation not permitted */
 #define TARGET_ENOENT           2               /* No such file or directory */
@@ -149,8 +149,12 @@
 #define TARGET_ELAST            90              /* Must be equal largest errno */
 
 /* Internal errors: */
-#define TARGET_EJUSTRETURN      254             /* Just return without modifing regs */
+#define TARGET_EJUSTRETURN      254             /* Just return without modifying regs */
 #define TARGET_ERESTART         255             /* Restart syscall */
-#define TARGET_ERESTARTSYS      TARGET_ERESTART /* Linux compat */
 
-#endif /* !  _ERRNO_DEFS_H_ */
+#include "special-errno.h"
+
+_Static_assert(TARGET_ERESTART == QEMU_ERESTARTSYS,
+               "TARGET_ERESTART and QEMU_ERESTARTSYS expected to match");
+
+#endif /* ERRNO_DEFS_H */

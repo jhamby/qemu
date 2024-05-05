@@ -285,7 +285,7 @@ static void zynq_slcr_compute_clocks_internal(ZynqSLCRState *s, uint64_t ps_clk)
 }
 
 /**
- * Compute and set the ouputs clocks periods.
+ * Compute and set the outputs clocks periods.
  * But do not propagate them further. Connected clocks
  * will not receive any updates (See zynq_slcr_compute_clocks())
  */
@@ -416,7 +416,7 @@ static void zynq_slcr_reset_init(Object *obj, ResetType type)
     s->regs[R_DDRIOB + 12] = 0x00000021;
 }
 
-static void zynq_slcr_reset_hold(Object *obj)
+static void zynq_slcr_reset_hold(Object *obj, ResetType type)
 {
     ZynqSLCRState *s = ZYNQ_SLCR(obj);
 
@@ -425,7 +425,7 @@ static void zynq_slcr_reset_hold(Object *obj)
     zynq_slcr_propagate_clocks(s);
 }
 
-static void zynq_slcr_reset_exit(Object *obj)
+static void zynq_slcr_reset_exit(Object *obj, ResetType type)
 {
     ZynqSLCRState *s = ZYNQ_SLCR(obj);
 
@@ -603,7 +603,7 @@ static const VMStateDescription vmstate_zynq_slcr = {
     .name = "zynq_slcr",
     .version_id = 3,
     .minimum_version_id = 2,
-    .fields = (VMStateField[]) {
+    .fields = (const VMStateField[]) {
         VMSTATE_UINT32_ARRAY(regs, ZynqSLCRState, ZYNQ_SLCR_NUM_REGS),
         VMSTATE_CLOCK_V(ps_clk, ZynqSLCRState, 3),
         VMSTATE_END_OF_LIST()
